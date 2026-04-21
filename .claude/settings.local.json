@@ -3,7 +3,23 @@
     "allow": [
       "Bash(pip install *)",
       "Bash(pip show *)",
-      "Bash(python -c ' *)"
+      "Bash(python -c ' *)",
+      "Bash(python -c \"import risk_agent; import reflector_agent; import main; print\\('imports OK'\\)\")",
+      "Bash(python -c \"import sys; print\\(sys.executable\\)\")",
+      "Bash(python -c \"import site; print\\(site.getusersitepackages\\(\\)\\)\")",
+      "Bash(python -m pip --version)",
+      "Bash(python -m pip list)",
+      "Bash(py -3.14 -m venv venv --clear)",
+      "Bash(py -3.14 -c \"import sys; print\\(sys.executable\\)\")",
+      "Bash(py -3.14 -c \"import alpaca; print\\('alpaca OK'\\)\")",
+      "Bash(py -3.14 backtest_engine.py --help)",
+      "Bash(py -3.14 -c \"import optimizer; print\\('import OK'\\); combos = optimizer._build_combos\\(\\); print\\(f'{len\\(combos\\)} combinations in grid'\\)\")",
+      "Bash(py -3.14 -c \"import json,sys; d=json.load\\(sys.stdin\\); print\\(f'Combos: {d[\\\\\"total_combos\\\\\"]}, Valid: {d[\\\\\"valid_combos\\\\\"]}'\\); [print\\(f'#{r[\\\\\"rank\\\\\"]} gap={r[\\\\\"params\\\\\"][\\\\\"gap_threshold\\\\\"]} stop={r[\\\\\"params\\\\\"][\\\\\"stop_pct\\\\\"]} target={r[\\\\\"params\\\\\"][\\\\\"target_pct\\\\\"]} fade={r[\\\\\"params\\\\\"][\\\\\"fade\\\\\"]} IS-PF={r[\\\\\"in_sample\\\\\"][\\\\\"profit_factor\\\\\"]} OOS={r[\\\\\"oos\\\\\"][\\\\\"profit_factor\\\\\"] if r[\\\\\"oos\\\\\"] else \\\\\"n/a\\\\\"}'\\) for r in d[\\\\\"results\\\\\"]]\")",
+      "Bash(git commit -m ' *)",
+      "Bash(git add *)",
+      "Bash(git commit -m 'Final: gap-fade edge decays across 2022->2023->2024 OOS. Archiving. *)",
+      "Bash(git tag *)",
+      "Bash(git push *)"
     ]
   }
 }
