@@ -3,10 +3,12 @@ Finder Agent: Scans S&P 500 for stocks with >2% gap at open,
 then uses an LLM to identify likely news catalysts.
 """
 
+import io
 import json
 from datetime import date, timedelta
 
 import pandas as pd
+import requests
 from alpaca.data.historical import StockHistoricalDataClient
 from alpaca.data.requests import StockBarsRequest
 from alpaca.data.timeframe import TimeFrame
@@ -18,7 +20,8 @@ from config import API_KEY, SECRET_KEY, OPENAI_KEY, GAP_THRESHOLD
 def get_sp500_symbols() -> list[str]:
     """Fetch current S&P 500 tickers from Wikipedia."""
     url = "https://en.wikipedia.org/wiki/List_of_S%26P_500_companies"
-    tables = pd.read_html(url)
+    html = requests.get(url, headers={"User-Agent": "Mozilla/5.0"}, timeout=15).text
+    tables = pd.read_html(io.StringIO(html))
     symbols = tables[0]["Symbol"].str.replace(".", "-", regex=False).tolist()
     return symbols
 

@@ -1,0 +1,110 @@
+{
+  "metrics": {
+    "period": "2025-01-01 to 2025-12-31",
+    "initial_equity": 50000.0,
+    "final_equity": 47422.22,
+    "total_pnl": -2577.78,
+    "total_return_pct": -5.16,
+    "total_trades": 5,
+    "trading_days_active": 2,
+    "trading_days_total": 261,
+    "win_rate_pct": 0.0,
+    "avg_win": 0,
+    "avg_loss": -515.56,
+    "profit_factor": 0.0,
+    "max_drawdown_pct": 5.16,
+    "sharpe_ratio": -1.36,
+    "slippage_per_side": "0.1bps",
+    "exit_breakdown": {
+      "stop": 5,
+      "target": 0,
+      "eod": 0
+    },
+    "notes": [
+      "Volume filter uses yesterday's volume vs prior 20-day avg (no lookahead)",
+      "Survivorship bias present: uses current S&P 500 constituents"
+    ]
+  },
+  "trades": [
+    {
+      "date": "2025-01-03",
+      "symbol": "CVNA",
+      "direction": "short",
+      "entry": 188.0118,
+      "exit": 191.9638,
+      "stop": 191.772,
+      "target": 180.4913,
+      "shares": 132,
+      "pnl": -521.67,
+      "exit_reason": "stop",
+      "gap_pct": -5.69,
+      "vol_ratio": 3.83,
+      "rsi": 39.92,
+      "equity_after": 49478.33
+    },
+    {
+      "date": "2025-01-03",
+      "symbol": "CEG",
+      "direction": "long",
+      "entry": 250.7505,
+      "exit": 245.4898,
+      "stop": 245.7355,
+      "target": 260.7805,
+      "shares": 99,
+      "pnl": -520.81,
+      "exit_reason": "stop",
+      "gap_pct": 3.26,
+      "vol_ratio": 1.97,
+      "rsi": 53.45,
+      "equity_after": 48957.52
+    },
+    {
+      "date": "2025-01-06",
+      "symbol": "CVNA",
+      "direction": "long",
+      "entry": 188.153,
+      "exit": 184.2055,
+      "stop": 184.3899,
+      "target": 195.6791,
+      "shares": 130,
+      "pnl": -513.17,
+      "exit_reason": "stop",
+      "gap_pct": 6.1,
+      "vol_ratio": 4.09,
+      "rsi": 35.92,
+      "equity_after": 48444.35
+    },
+    {
+      "date": "2025-01-06",
+      "symbol": "MOS",
+      "direction": "long",
+      "entry": 25.7958,
+      "exit": 25.2546,
+      "stop": 25.2799,
+      "target": 26.8276,
+      "shares": 948,
+      "pnl": -513.05,
+      "exit_reason": "stop",
+      "gap_pct": 2.47,
+      "vol_ratio": 1.69,
+      "rsi": 49.16,
+      "equity_after": 47931.3
+    },
+    {
+      "date": "2025-01-06",
+      "symbol": "CEG",
+      "direction": "long",
+      "entry": 258.1379,
+      "exit": 252.7221,
+      "stop": 252.9751,
+      "target": 268.4634,
+      "shares": 94,
+      "pnl": -509.08,
+      "exit_reason": "stop",
+      "gap_pct": 2.17,
+      "vol_ratio": 1.87,
+      "rsi": 56.16,
+      "equity_after": 47422.22
+    }
+  ]
+}
