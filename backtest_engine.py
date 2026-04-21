@@ -137,11 +137,18 @@ def _simulate_day(
     gap_threshold: float,
     max_trades: int,
     risk_per_trade: float,
+    fade: bool = False,         # True = gap-fade (trade against the gap)
+    stop_pct: float = STOP_PCT,
+    target_pct: float = STOP_PCT * TARGET_MULT,
 ) -> list[dict]:
     """
     Run one trading day through the pipeline.  Returns a list of trade dicts.
     All positions are sized from day_equity (pre-open), matching live behaviour
     where all orders are submitted simultaneously at the open.
+
+    fade=True inverts direction: short up-gappers, long down-gappers.
+    Adjust stop_pct / target_pct to match the fade setup (typically stop wider
+    than target since fade targets mean-reversion, not continuation).
     """
     candidates = []
 
@@ -164,7 +171,8 @@ def _simulate_day(
         if abs(gap_pct) < gap_threshold:
             continue
 
-        is_long = gap_pct > 0
+        # Momentum: follow the gap. Fade: trade against it.
+        is_long = (gap_pct < 0) if fade else (gap_pct > 0)
 
         # --- Filter: volume ratio (FIX: use yesterday's volume, known at open) ---
         # Compares yesterday's volume against its own 20-day prior average.
@@ -211,14 +219,13 @@ def _simulate_day(
 
         # --- Risk: position sizing from pre-open equity (no intraday compounding) ---
         dollar_risk   = day_equity * risk_per_trade
-        stop_distance = entry * STOP_PCT
+        stop_distance = entry * stop_pct
         shares = math.floor(dollar_risk / stop_distance)
         if shares < 1:
             continue
 
-        raw_stop   = entry * (1 - STOP_PCT) if is_long else entry * (1 + STOP_PCT)
-        risk_pts   = abs(entry - raw_stop)
-        raw_target = entry + TARGET_MULT * risk_pts if is_long else entry - TARGET_MULT * risk_pts
+        raw_stop   = entry * (1 - stop_pct)   if is_long else entry * (1 + stop_pct)
+        raw_target = entry * (1 + target_pct) if is_long else entry * (1 - target_pct)
 
         # --- Exit simulation (conservative: stop wins ties with target) ---
         if is_long:
@@ -273,6 +280,9 @@ def run_backtest(
     risk_per_trade: float = RISK_PER_TRADE,
     max_drawdown: float = MAX_DRAWDOWN,
     enforce_drawdown_stop: bool = True,
+    fade: bool = False,
+    stop_pct: float = STOP_PCT,
+    target_pct: float = STOP_PCT * TARGET_MULT,
 ) -> dict:
     """
     Run the full gap strategy backtest over [start, end].
@@ -282,12 +292,18 @@ def run_backtest(
 
     enforce_drawdown_stop=False lets the backtest run the full window so you
     can see the full distribution of returns; set to True to match live behaviour.
+
+    fade=True inverts direction (short up-gappers, long down-gappers).
+    For fade mode the typical setup is stop_pct=0.04, target_pct=0.02
+    (wide stop, tight target) since you're betting on mean-reversion.
     """
-    print(f"\n=== Gap Strategy Backtest: {start} → {end} ===")
+    strategy_label = "GAP-FADE" if fade else "GAP-MOMENTUM"
+    print(f"\n=== {strategy_label} Backtest: {start} → {end} ===")
     print(f"    Initial equity:       ${initial_equity:,.0f}")
     print(f"    Gap threshold:        {gap_threshold*100:.1f}%  |  Max trades/day: {max_trades_per_day}")
     print(f"    Risk/trade:           {risk_per_trade*100:.1f}%  |  Max drawdown:   {max_drawdown*100:.1f}%")
-    print(f"    Slippage:             {SLIPPAGE*100:.1f}bps per side")
+    print(f"    Stop:                 {stop_pct*100:.1f}%         |  Target:          {target_pct*100:.1f}%")
+    print(f"    Slippage:             {SLIPPAGE*10000:.0f}bps per side")
     print(f"    Drawdown stop active: {enforce_drawdown_stop}\n")
 
     symbols = get_sp500_symbols()
@@ -332,6 +348,7 @@ def run_backtest(
         day_trades = _simulate_day(
             test_day, symbol_bars, symbol_index,
             equity, gap_threshold, max_trades_per_day, risk_per_trade,
+            fade=fade, stop_pct=stop_pct, target_pct=target_pct,
         )
 
         day_pnl = 0.0
@@ -389,6 +406,9 @@ def run_backtest(
 
         metrics = {
             "period":              f"{start} to {end}",
+            "strategy":            strategy_label,
+            "stop_pct":            f"{stop_pct*100:.1f}%",
+            "target_pct":          f"{target_pct*100:.1f}%",
             "initial_equity":      initial_equity,
             "final_equity":        round(equity, 2),
             "total_pnl":           round(equity - initial_equity, 2),
@@ -402,7 +422,7 @@ def run_backtest(
             "profit_factor":       round(sum(winners) / abs(sum(losers)), 2) if losers else float("inf"),
             "max_drawdown_pct":    round(max_dd * 100, 2),
             "sharpe_ratio":        sharpe,
-            "slippage_per_side":   f"{SLIPPAGE*100:.1f}bps",
+            "slippage_per_side":   f"{SLIPPAGE*10000:.0f}bps",
             "exit_breakdown":      exit_counts,
             "notes": [
                 "Volume filter uses yesterday's volume vs prior 20-day avg (no lookahead)",
@@ -439,7 +459,18 @@ if __name__ == "__main__":
         action="store_true",
         help="Disable the 5%% drawdown hard stop so the full window is tested (research mode)",
     )
+    parser.add_argument(
+        "--fade",
+        action="store_true",
+        help="Gap-fade mode: short up-gappers, long down-gappers (mean-reversion)",
+    )
+    parser.add_argument("--stop-pct",   type=float, default=None, help="Stop distance 0-1 (default: 0.02 momentum / 0.04 fade)")
+    parser.add_argument("--target-pct", type=float, default=None, help="Target distance 0-1 (default: 0.04 momentum / 0.02 fade)")
     args = parser.parse_args()
+
+    # Sensible defaults differ by mode
+    stop_pct   = args.stop_pct   if args.stop_pct   is not None else (0.04 if args.fade else STOP_PCT)
+    target_pct = args.target_pct if args.target_pct is not None else (0.02 if args.fade else STOP_PCT * TARGET_MULT)
 
     run_backtest(
         start=date.fromisoformat(args.start),
@@ -448,4 +479,7 @@ if __name__ == "__main__":
         gap_threshold=args.gap,
         max_trades_per_day=args.max_trades,
         enforce_drawdown_stop=not args.ignore_drawdown_stop,
+        fade=args.fade,
+        stop_pct=stop_pct,
+        target_pct=target_pct,
     )
