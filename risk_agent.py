@@ -12,11 +12,10 @@ For each approved candidate it:
 """
 
 import math
-from alpaca.trading.client import TradingClient
 from alpaca.trading.requests import MarketOrderRequest, StopLossRequest, TakeProfitRequest
 from alpaca.trading.enums import OrderSide, OrderClass, TimeInForce
 
-from config import API_KEY, SECRET_KEY, BASE_URL, RISK_PER_TRADE, MAX_DRAWDOWN
+from config import get_trading_client, RISK_PER_TRADE, MAX_DRAWDOWN
 
 STOP_PCT    = 0.02  # stop placed 2% from entry
 TARGET_MULT = 2.0   # take-profit at 2:1 reward-to-risk (4% from entry)
@@ -63,7 +62,7 @@ def evaluate(candidates: list[dict]) -> list[dict]:
     """
     print("[Risk] Evaluating position sizes and drawdown...")
 
-    client = TradingClient(API_KEY, SECRET_KEY, paper=True)
+    client = get_trading_client()
     account = _get_account(client)
     equity = account["equity"]
 
@@ -109,7 +108,7 @@ def place_order(trade: dict) -> dict:
     Returns a minimal dict with order ID and calculated target price so the
     caller can persist them in the trade log.
     """
-    client = TradingClient(API_KEY, SECRET_KEY, paper=True)
+    client = get_trading_client()
     is_long = trade["side"] == "buy"
     side    = OrderSide.BUY if is_long else OrderSide.SELL
     entry   = trade["entry_price"]

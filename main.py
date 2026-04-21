@@ -11,13 +11,11 @@ Usage:
 import argparse
 import sys
 
-from alpaca.trading.client import TradingClient
-
 import finder_agent
 import filter_agent
 import risk_agent
 import reflector_agent
-from config import API_KEY, SECRET_KEY
+from config import get_trading_client
 
 
 def morning_run():
@@ -59,7 +57,7 @@ def flatten_run():
     print("=" * 60)
     print("  TRADING SYSTEM — FLATTEN POSITIONS")
     print("=" * 60)
-    client = TradingClient(API_KEY, SECRET_KEY, paper=True)
+    client = get_trading_client()
     try:
         # cancel_orders=True cancels the open bracket legs before closing
         responses = client.close_all_positions(cancel_orders=True)

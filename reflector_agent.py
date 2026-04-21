@@ -10,12 +10,11 @@ import json
 import os
 from datetime import date, datetime
 
-from alpaca.trading.client import TradingClient
 from alpaca.trading.requests import GetOrdersRequest
 from alpaca.trading.enums import QueryOrderStatus
 from openai import OpenAI
 
-from config import API_KEY, SECRET_KEY, OPENAI_KEY
+from config import get_trading_client, OPENAI_KEY
 
 TRADE_LOG = "trade_log.json"
 SUMMARY_LOG = "daily_summaries.json"
@@ -148,7 +147,7 @@ def close_day() -> dict:
     """
     print("[Reflector] Running end-of-day reconciliation...")
 
-    client = TradingClient(API_KEY, SECRET_KEY, paper=True)
+    client = get_trading_client()
 
     log = _load_json(TRADE_LOG)
     open_trades = [t for t in log if t["outcome"] == "open"]

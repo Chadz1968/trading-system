@@ -1,0 +1,329 @@
+{
+  "in_sample_period": "2022-01-01 to 2022-12-31",
+  "oos_period": "2023-01-01 to 2023-12-31",
+  "total_combos": 200,
+  "valid_combos": 200,
+  "min_trades_filter": 30,
+  "results": [
+    {
+      "rank": 1,
+      "params": {
+        "gap_threshold": 0.05,
+        "stop_pct": 0.04,
+        "target_pct": 0.01,
+        "fade": true,
+        "prev_close_target": true
+      },
+      "in_sample": {
+        "total_trades": 254,
+        "win_rate": 52.4,
+        "profit_factor": 1.311,
+        "total_return_pct": 36.2,
+        "avg_win": 1147.43,
+        "avg_loss": -962.08,
+        "stop_rate": 29.5,
+        "target_rate": 10.2,
+        "eod_rate": 60.2
+      },
+      "oos": {
+        "total_trades": 262,
+        "win_rate": 45.0,
+        "profit_factor": 0.951,
+        "total_return_pct": -6.18,
+        "avg_win": 1006.03,
+        "avg_loss": -867.31,
+        "stop_rate": 37.8,
+        "target_rate": 7.6,
+        "eod_rate": 54.6
+      }
+    },
+    {
+      "rank": 2,
+      "params": {
+        "gap_threshold": 0.06,
+        "stop_pct": 0.04,
+        "target_pct": 0.01,
+        "fade": true,
+        "prev_close_target": true
+      },
+      "in_sample": {
+        "total_trades": 207,
+        "win_rate": 52.2,
+        "profit_factor": 1.294,
+        "total_return_pct": 27.45,
+        "avg_win": 1118.86,
+        "avg_loss": -943.31,
+        "stop_rate": 31.4,
+        "target_rate": 7.7,
+        "eod_rate": 60.9
+      },
+      "oos": {
+        "total_trades": 211,
+        "win_rate": 46.0,
+        "profit_factor": 1.011,
+        "total_return_pct": 1.16,
+        "avg_win": 1065.83,
+        "avg_loss": -896.72,
+        "stop_rate": 37.9,
+        "target_rate": 5.7,
+        "eod_rate": 56.4
+      }
+    },
+    {
+      "rank": 3,
+      "params": {
+        "gap_threshold": 0.04,
+        "stop_pct": 0.04,
+        "target_pct": 0.01,
+        "fade": true,
+        "prev_close_target": true
+      },
+      "in_sample": {
+        "total_trades": 337,
+        "win_rate": 53.1,
+        "profit_factor": 1.283,
+        "total_return_pct": 45.37,
+        "avg_win": 1148.83,
+        "avg_loss": -1014.38,
+        "stop_rate": 29.4,
+        "target_rate": 15.4,
+        "eod_rate": 55.2
+      },
+      "oos": {
+        "total_trades": 335,
+        "win_rate": 47.8,
+        "profit_factor": 1.022,
+        "total_return_pct": 3.33,
+        "avg_win": 956.27,
+        "avg_loss": -855.28,
+        "stop_rate": 33.4,
+        "target_rate": 11.9,
+        "eod_rate": 54.6
+      }
+    },
+    {
+      "rank": 4,
+      "params": {
+        "gap_threshold": 0.06,
+        "stop_pct": 0.03,
+        "target_pct": 0.01,
+        "fade": true,
+        "prev_close_target": true
+      },
+      "in_sample": {
+        "total_trades": 207,
+        "win_rate": 47.8,
+        "profit_factor": 1.266,
+        "total_return_pct": 30.63,
+        "avg_win": 1472.15,
+        "avg_loss": -1065.84,
+        "stop_rate": 42.5,
+        "target_rate": 6.8,
+        "eod_rate": 50.7
+      },
+      "oos": {
+        "total_trades": 211,
+        "win_rate": 44.5,
+        "profit_factor": 1.123,
+        "total_return_pct": 15.65,
+        "avg_win": 1522.06,
+        "avg_loss": -1089.12,
+        "stop_rate": 47.4,
+        "target_rate": 5.2,
+        "eod_rate": 47.4
+      }
+    },
+    {
+      "rank": 5,
+      "params": {
+        "gap_threshold": 0.05,
+        "stop_pct": 0.03,
+        "target_pct": 0.01,
+        "fade": true,
+        "prev_close_target": true
+      },
+      "in_sample": {
+        "total_trades": 254,
+        "win_rate": 48.0,
+        "profit_factor": 1.265,
+        "total_return_pct": 39.17,
+        "avg_win": 1531.49,
+        "avg_loss": -1118.74,
+        "stop_rate": 41.7,
+        "target_rate": 9.4,
+        "eod_rate": 48.8
+      },
+      "oos": {
+        "total_trades": 262,
+        "win_rate": 42.7,
+        "profit_factor": 1.013,
+        "total_return_pct": 2.06,
+        "avg_win": 1425.16,
+        "avg_loss": -1050.38,
+        "stop_rate": 49.2,
+        "target_rate": 6.9,
+        "eod_rate": 43.9
+      }
+    },
+    {
+      "rank": 6,
+      "params": {
+        "gap_threshold": 0.06,
+        "stop_pct": 0.02,
+        "target_pct": 0.01,
+        "fade": true,
+        "prev_close_target": true
+      },
+      "in_sample": {
+        "total_trades": 207,
+        "win_rate": 40.1,
+        "profit_factor": 1.261,
+        "total_return_pct": 46.21,
+        "avg_win": 2688.0,
+        "avg_loss": -1426.54,
+        "stop_rate": 54.6,
+        "target_rate": 5.3,
+        "eod_rate": 40.1
+      },
+      "oos": {
+        "total_trades": 211,
+        "win_rate": 36.0,
+        "profit_factor": 1.161,
+        "total_return_pct": 28.71,
+        "avg_win": 2720.63,
+        "avg_loss": -1318.97,
+        "stop_rate": 60.2,
+        "target_rate": 5.2,
+        "eod_rate": 34.6
+      }
+    },
+    {
+      "rank": 7,
+      "params": {
+        "gap_threshold": 0.04,
+        "stop_pct": 0.03,
+        "target_pct": 0.01,
+        "fade": true,
+        "prev_close_target": true
+      },
+      "in_sample": {
+        "total_trades": 337,
+        "win_rate": 49.3,
+        "profit_factor": 1.25,
+        "total_return_pct": 51.68,
+        "avg_win": 1556.28,
+        "avg_loss": -1208.58,
+        "stop_rate": 40.7,
+        "target_rate": 14.2,
+        "eod_rate": 45.1
+      },
+      "oos": {
+        "total_trades": 335,
+        "win_rate": 45.1,
+        "profit_factor": 1.07,
+        "total_return_pct": 13.35,
+        "avg_win": 1349.34,
+        "avg_loss": -1034.78,
+        "stop_rate": 44.2,
+        "target_rate": 11.0,
+        "eod_rate": 44.8
+      }
+    },
+    {
+      "rank": 8,
+      "params": {
+        "gap_threshold": 0.06,
+        "stop_pct": 0.01,
+        "target_pct": 0.01,
+        "fade": true,
+        "prev_close_target": true
+      },
+      "in_sample": {
+        "total_trades": 207,
+        "win_rate": 24.2,
+        "profit_factor": 1.238,
+        "total_return_pct": 70.04,
+        "avg_win": 7285.53,
+        "avg_loss": -1874.11,
+        "stop_rate": 74.4,
+        "target_rate": 2.9,
+        "eod_rate": 22.7
+      },
+      "oos": {
+        "total_trades": 211,
+        "win_rate": 19.9,
+        "profit_factor": 1.026,
+        "total_return_pct": 5.5,
+        "avg_win": 5215.48,
+        "avg_loss": -1263.61,
+        "stop_rate": 79.1,
+        "target_rate": 3.8,
+        "eod_rate": 17.1
+      }
+    },
+    {
+      "rank": 9,
+      "params": {
+        "gap_threshold": 0.05,
+        "stop_pct": 0.02,
+        "target_pct": 0.01,
+        "fade": true,
+        "prev_close_target": true
+      },
+      "in_sample": {
+        "total_trades": 254,
+        "win_rate": 39.8,
+        "profit_factor": 1.215,
+        "total_return_pct": 47.93,
+        "avg_win": 2684.07,
+        "avg_loss": -1458.56,
+        "stop_rate": 55.1,
+        "target_rate": 7.1,
+        "eod_rate": 37.8
+      },
+      "oos": {
+        "total_trades": 262,
+        "win_rate": 34.7,
+        "profit_factor": 1.071,
+        "total_return_pct": 15.56,
+        "avg_win": 2573.4,
+        "avg_loss": -1278.48,
+        "stop_rate": 61.5,
+        "target_rate": 6.9,
+        "eod_rate": 31.7
+      }
+    },
+    {
+      "rank": 10,
+      "params": {
+        "gap_threshold": 0.05,
+        "stop_pct": 0.04,
+        "target_pct": 0.04,
+        "fade": true,
+        "prev_close_target": false
+      },
+      "in_sample": {
+        "total_trades": 254,
+        "win_rate": 55.1,
+        "profit_factor": 1.208,
+        "total_return_pct": 21.45,
+        "avg_win": 889.29,
+        "avg_loss": -903.95,
+        "stop_rate": 29.5,
+        "target_rate": 37.8,
+        "eod_rate": 32.7
+      },
+      "oos": {
+        "total_trades": 262,
+        "win_rate": 46.6,
+        "profit_factor": 0.77,
+        "total_return_pct": -24.8,
+        "avg_win": 680.47,
+        "avg_loss": -770.11,
+        "stop_rate": 37.8,
+        "target_rate": 28.6,
+        "eod_rate": 33.6
+      }
+    }
+  ]
+}
