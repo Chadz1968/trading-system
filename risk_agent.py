@@ -13,12 +13,13 @@ For each approved candidate it:
 
 import math
 from alpaca.trading.client import TradingClient
-from alpaca.trading.requests import MarketOrderRequest
-from alpaca.trading.enums import OrderSide, TimeInForce
+from alpaca.trading.requests import MarketOrderRequest, StopLossRequest, TakeProfitRequest
+from alpaca.trading.enums import OrderSide, OrderClass, TimeInForce
 
 from config import API_KEY, SECRET_KEY, BASE_URL, RISK_PER_TRADE, MAX_DRAWDOWN
 
-STOP_PCT = 0.02     # stop placed 2% from entry
+STOP_PCT    = 0.02  # stop placed 2% from entry
+TARGET_MULT = 2.0   # take-profit at 2:1 reward-to-risk (4% from entry)
 
 
 def _get_account(client: TradingClient) -> dict:
@@ -100,18 +101,37 @@ def evaluate(candidates: list[dict]) -> list[dict]:
 
 def place_order(trade: dict) -> dict:
     """
-    Submit a market order to Alpaca paper trading.
-    Returns the order object as a dict.
+    Submit a bracket order to Alpaca paper trading.
+    A bracket order submits the entry market order plus two exit legs in one
+    request: a stop-loss leg and a take-profit limit leg.  Alpaca monitors both
+    legs; whichever fills first cancels the other.
+
+    Returns a minimal dict with order ID and calculated target price so the
+    caller can persist them in the trade log.
     """
     client = TradingClient(API_KEY, SECRET_KEY, paper=True)
-    side = OrderSide.BUY if trade["side"] == "buy" else OrderSide.SELL
+    is_long = trade["side"] == "buy"
+    side    = OrderSide.BUY if is_long else OrderSide.SELL
+    entry   = trade["entry_price"]
+    stop    = trade["stop_price"]   # pre-calculated by _size_position
+    target  = round(
+        entry * (1 + STOP_PCT * TARGET_MULT) if is_long else entry * (1 - STOP_PCT * TARGET_MULT),
+        2,
+    )
 
     order_request = MarketOrderRequest(
         symbol=trade["symbol"],
         qty=trade["shares"],
         side=side,
         time_in_force=TimeInForce.DAY,
+        order_class=OrderClass.BRACKET,
+        stop_loss=StopLossRequest(stop_price=stop),
+        take_profit=TakeProfitRequest(limit_price=target),
     )
     order = client.submit_order(order_request)
-    print(f"[Risk] Order submitted: {order.id} — {trade['side'].upper()} {trade['shares']} {trade['symbol']}")
-    return dict(order)
+    direction = "LONG" if is_long else "SHORT"
+    print(
+        f"[Risk] Bracket order {order.id} — {direction} {trade['shares']} {trade['symbol']} "
+        f"| stop=${stop}  target=${target}"
+    )
+    return {"id": str(order.id), "target_price": target}

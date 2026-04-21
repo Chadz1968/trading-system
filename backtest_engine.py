@@ -21,7 +21,10 @@ Usage:
 import json
 import math
 import statistics
-from datetime import date, timedelta
+import zoneinfo
+from datetime import date, datetime, time, timedelta
+
+_ET = zoneinfo.ZoneInfo("America/New_York")
 
 from alpaca.data.historical import StockHistoricalDataClient
 from alpaca.data.requests import StockBarsRequest
@@ -97,6 +100,27 @@ def _build_date_index(bars: list) -> dict[date, int]:
     return {b.timestamp.date(): idx for idx, b in enumerate(bars)}
 
 
+def _fetch_minute_bars(
+    client: StockHistoricalDataClient, symbol: str, trade_date: date, exit_time: time
+) -> list:
+    """Fetch 1-min bars for symbol from 9:30 ET to exit_time ET on trade_date."""
+    open_dt  = datetime(trade_date.year, trade_date.month, trade_date.day, 9, 30, tzinfo=_ET)
+    close_dt = datetime(trade_date.year, trade_date.month, trade_date.day,
+                        exit_time.hour, exit_time.minute, tzinfo=_ET)
+    try:
+        req = StockBarsRequest(
+            symbol_or_symbols=symbol,
+            timeframe=TimeFrame.Minute,
+            start=open_dt,
+            end=close_dt,
+        )
+        bars = client.get_stock_bars(req)
+        data = bars.data.get(symbol)
+        return sorted(data, key=lambda b: b.timestamp) if data else []
+    except Exception:
+        return []
+
+
 # ---------------------------------------------------------------------------
 # Indicator helpers (mirror filter_agent logic exactly)
 # ---------------------------------------------------------------------------
@@ -105,10 +129,9 @@ def _compute_rsi(closes: list[float], period: int = 14) -> float:
     if len(closes) < period + 1:
         return 50.0
     deltas = [closes[i] - closes[i - 1] for i in range(1, len(closes))]
-    gains  = [d for d in deltas if d > 0]
-    losses = [-d for d in deltas if d < 0]
-    avg_gain = sum(gains[-period:]) / period
-    avg_loss = sum(losses[-period:]) / period
+    recent   = deltas[-period:]
+    avg_gain = sum(d for d in recent if d > 0) / period
+    avg_loss = sum(-d for d in recent if d < 0) / period
     if avg_loss == 0:
         return 100.0
     return round(100 - (100 / (1 + avg_gain / avg_loss)), 2)
@@ -126,6 +149,68 @@ def _volume_ratio(prior_volumes: list[float], compare_vol: float) -> float:
 
 
 # ---------------------------------------------------------------------------
+# Exit helpers
+# ---------------------------------------------------------------------------
+
+def _ohlc_exit(
+    high: float, low: float, close: float,
+    is_long: bool, raw_stop: float, raw_target: float,
+) -> tuple[float, str]:
+    """Simulate exit from daily OHLC. Stop wins ties with target."""
+    if is_long:
+        if low  <= raw_stop:   return raw_stop,   "stop"
+        if high >= raw_target: return raw_target, "target"
+    else:
+        if high >= raw_stop:   return raw_stop,   "stop"
+        if low  <= raw_target: return raw_target, "target"
+    return close, "eod"
+
+
+def _intraday_exit(
+    minute_bars: list, is_long: bool, raw_stop: float, raw_target: float,
+) -> tuple[float, str]:
+    """Walk minute bars bar-by-bar; return (raw_exit_price, reason).
+    'time' means neither level was hit before the cutoff."""
+    for bar in minute_bars:
+        if is_long:
+            if bar.low  <= raw_stop:   return raw_stop,   "stop"
+            if bar.high >= raw_target: return raw_target, "target"
+        else:
+            if bar.high >= raw_stop:   return raw_stop,   "stop"
+            if bar.low  <= raw_target: return raw_target, "target"
+    return (minute_bars[-1].close if minute_bars else 0.0), "time"
+
+
+def _trailing_stop_exit(
+    minute_bars: list, is_long: bool, entry: float, initial_stop: float, trail_pct: float,
+) -> tuple[float, str]:
+    """Walk minute bars with a trailing stop.
+    The stop starts at initial_stop and ratchets up (long) or down (short) as
+    price moves in our favour. Returns (raw_exit_price, reason):
+      'stop'  — initial hard stop hit (price never moved in our favour)
+      'trail' — trailing stop fired after a favourable move
+      'eod'   — held to end of bar window without a stop fire
+    """
+    trail_stop = initial_stop
+
+    for bar in minute_bars:
+        if is_long:
+            # Ratchet trail up behind the bar's high
+            trail_stop = max(trail_stop, bar.high * (1 - trail_pct))
+            if bar.low <= trail_stop:
+                reason = "trail" if trail_stop > initial_stop else "stop"
+                return trail_stop, reason
+        else:
+            # Ratchet trail down behind the bar's low
+            trail_stop = min(trail_stop, bar.low * (1 + trail_pct))
+            if bar.high >= trail_stop:
+                reason = "trail" if trail_stop < initial_stop else "stop"
+                return trail_stop, reason
+
+    return (minute_bars[-1].close if minute_bars else 0.0), "eod"
+
+
+# ---------------------------------------------------------------------------
 # Per-day simulation
 # ---------------------------------------------------------------------------
 
@@ -140,6 +225,10 @@ def _simulate_day(
     fade: bool = False,         # True = gap-fade (trade against the gap)
     stop_pct: float = STOP_PCT,
     target_pct: float = STOP_PCT * TARGET_MULT,
+    exit_time: time | None = None,
+    minute_client: StockHistoricalDataClient | None = None,
+    trail_pct: float | None = None,
+    prev_close_target: bool = False,
 ) -> list[dict]:
     """
     Run one trading day through the pipeline.  Returns a list of trade dicts.
@@ -194,13 +283,14 @@ def _simulate_day(
             continue
 
         candidates.append({
-            "symbol":   sym,
-            "gap_pct":  gap_pct,
-            "is_long":  is_long,
-            "open":     today_open,
-            "high":     today_high,
-            "low":      today_low,
-            "close":    today_close,
+            "symbol":    sym,
+            "gap_pct":   gap_pct,
+            "is_long":   is_long,
+            "prev_close": prev_close,
+            "open":      today_open,
+            "high":      today_high,
+            "low":       today_low,
+            "close":     today_close,
             "vol_ratio": vol_ratio,
             "rsi":       rsi,
         })
@@ -224,27 +314,27 @@ def _simulate_day(
         if shares < 1:
             continue
 
-        raw_stop   = entry * (1 - stop_pct)   if is_long else entry * (1 + stop_pct)
-        raw_target = entry * (1 + target_pct) if is_long else entry * (1 - target_pct)
+        raw_stop   = entry * (1 - stop_pct) if is_long else entry * (1 + stop_pct)
+        raw_target = c["prev_close"] if prev_close_target else (
+            entry * (1 + target_pct) if is_long else entry * (1 - target_pct)
+        )
 
-        # --- Exit simulation (conservative: stop wins ties with target) ---
-        if is_long:
-            stop_hit   = c["low"]  <= raw_stop
-            target_hit = c["high"] >= raw_target
+        # --- Exit simulation ---
+        if minute_client is not None:
+            m_bars = _fetch_minute_bars(minute_client, c["symbol"], test_day, exit_time)
+            if m_bars:
+                if trail_pct is not None:
+                    raw_exit, exit_reason = _trailing_stop_exit(m_bars, is_long, entry, raw_stop, trail_pct)
+                else:
+                    raw_exit, exit_reason = _intraday_exit(m_bars, is_long, raw_stop, raw_target)
+                if not raw_exit:
+                    continue
+            else:
+                raw_exit, exit_reason = _ohlc_exit(c["high"], c["low"], c["close"], is_long, raw_stop, raw_target)
         else:
-            stop_hit   = c["high"] >= raw_stop
-            target_hit = c["low"]  <= raw_target
+            raw_exit, exit_reason = _ohlc_exit(c["high"], c["low"], c["close"], is_long, raw_stop, raw_target)
 
-        if stop_hit:
-            # Slippage worsens the stop fill
-            exit_price  = raw_stop * (1 - SLIPPAGE) if is_long else raw_stop * (1 + SLIPPAGE)
-            exit_reason = "stop"
-        elif target_hit:
-            exit_price  = raw_target * (1 - SLIPPAGE) if is_long else raw_target * (1 + SLIPPAGE)
-            exit_reason = "target"
-        else:
-            exit_price  = c["close"] * (1 - SLIPPAGE) if is_long else c["close"] * (1 + SLIPPAGE)
-            exit_reason = "eod"
+        exit_price = raw_exit * (1 - SLIPPAGE) if is_long else raw_exit * (1 + SLIPPAGE)
 
         pnl = (exit_price - entry) * shares * (1 if is_long else -1)
 
@@ -268,6 +358,42 @@ def _simulate_day(
 
 
 # ---------------------------------------------------------------------------
+# Results persistence
+# ---------------------------------------------------------------------------
+
+_RESULTS_FILE = "backtest_results.json"
+_MAX_FILE_BYTES = 5 * 1024 * 1024  # 5 MB
+
+
+def _append_results(result: dict) -> None:
+    """Append result to backtest_results.json. Clears the file if it exceeds 5 MB."""
+    import os
+    from datetime import timezone
+
+    result["run_timestamp"] = datetime.now(timezone.utc).isoformat()
+
+    history: list[dict] = []
+    if os.path.exists(_RESULTS_FILE):
+        if os.path.getsize(_RESULTS_FILE) > _MAX_FILE_BYTES:
+            print(f"[Results] File exceeds 5 MB — clearing history.")
+        else:
+            try:
+                with open(_RESULTS_FILE) as fh:
+                    existing = json.load(fh)
+                # Handle old single-object format
+                history = existing if isinstance(existing, list) else [existing]
+            except (json.JSONDecodeError, OSError):
+                history = []
+
+    history.append(result)
+
+    with open(_RESULTS_FILE, "w") as fh:
+        json.dump(history, fh, indent=2)
+
+    print(f"[Results] Appended run #{len(history)} to {_RESULTS_FILE}")
+
+
+# ---------------------------------------------------------------------------
 # Main backtest runner
 # ---------------------------------------------------------------------------
 
@@ -283,6 +409,9 @@ def run_backtest(
     fade: bool = False,
     stop_pct: float = STOP_PCT,
     target_pct: float = STOP_PCT * TARGET_MULT,
+    exit_time: time | None = None,
+    trail_pct: float | None = None,
+    prev_close_target: bool = False,
 ) -> dict:
     """
     Run the full gap strategy backtest over [start, end].
@@ -304,6 +433,11 @@ def run_backtest(
     print(f"    Risk/trade:           {risk_per_trade*100:.1f}%  |  Max drawdown:   {max_drawdown*100:.1f}%")
     print(f"    Stop:                 {stop_pct*100:.1f}%         |  Target:          {target_pct*100:.1f}%")
     print(f"    Slippage:             {SLIPPAGE*10000:.0f}bps per side")
+    print(f"    Exit time:            {'EOD (OHLC sim)' if exit_time is None else exit_time.strftime('%H:%M') + ' ET (minute bars)'}")
+    if trail_pct is not None:
+        print(f"    Trailing stop:        {trail_pct*100:.1f}% (replaces fixed target)")
+    if prev_close_target:
+        print(f"    Target:               prev_close (mean-reversion to yesterday's close)")
     print(f"    Drawdown stop active: {enforce_drawdown_stop}\n")
 
     symbols = get_sp500_symbols()
@@ -314,6 +448,11 @@ def run_backtest(
     print(f"Fetching OHLCV bars from {buffer_start} to {end}...")
     symbol_bars = _fetch_all_bars(symbols, buffer_start, end)
     print(f"Data loaded for {len(symbol_bars)} symbols.\n")
+
+    # Trailing stop requires minute bars for the full day if no exit_time given
+    if trail_pct is not None and exit_time is None:
+        exit_time = time(16, 0)
+    minute_client = StockHistoricalDataClient(API_KEY, SECRET_KEY) if (exit_time is not None or trail_pct is not None) else None
 
     # Pre-build date → index maps for O(1) day lookup
     symbol_index = {sym: _build_date_index(bars) for sym, bars in symbol_bars.items()}
@@ -349,6 +488,8 @@ def run_backtest(
             test_day, symbol_bars, symbol_index,
             equity, gap_threshold, max_trades_per_day, risk_per_trade,
             fade=fade, stop_pct=stop_pct, target_pct=target_pct,
+            exit_time=exit_time, minute_client=minute_client, trail_pct=trail_pct,
+            prev_close_target=prev_close_target,
         )
 
         day_pnl = 0.0
@@ -400,9 +541,9 @@ def run_backtest(
             sharpe = 0.0
 
         daily_active = sum(1 for r in daily_return_series if r != 0.0)
-        exit_counts  = {"stop": 0, "target": 0, "eod": 0}
+        exit_counts  = {"stop": 0, "target": 0, "trail": 0, "eod": 0, "time": 0}
         for t in all_trades:
-            exit_counts[t["exit_reason"]] += 1
+            exit_counts[t["exit_reason"]] = exit_counts.get(t["exit_reason"], 0) + 1
 
         metrics = {
             "period":              f"{start} to {end}",
@@ -423,6 +564,9 @@ def run_backtest(
             "max_drawdown_pct":    round(max_dd * 100, 2),
             "sharpe_ratio":        sharpe,
             "slippage_per_side":   f"{SLIPPAGE*10000:.0f}bps",
+            "trailing_stop_pct":   f"{trail_pct*100:.1f}%" if trail_pct is not None else "off",
+            "prev_close_target":   prev_close_target,
+            "exit_time":           "EOD" if exit_time is None else exit_time.strftime("%H:%M ET"),
             "exit_breakdown":      exit_counts,
             "notes": [
                 "Volume filter uses yesterday's volume vs prior 20-day avg (no lookahead)",
@@ -431,9 +575,7 @@ def run_backtest(
         }
 
     results = {"metrics": metrics, "trades": all_trades}
-
-    with open("backtest_results.json", "w") as fh:
-        json.dump(results, fh, indent=2)
+    _append_results(results)
 
     print("\n=== Backtest Complete ===")
     print(json.dumps(metrics, indent=2))
@@ -466,11 +608,27 @@ if __name__ == "__main__":
     )
     parser.add_argument("--stop-pct",   type=float, default=None, help="Stop distance 0-1 (default: 0.02 momentum / 0.04 fade)")
     parser.add_argument("--target-pct", type=float, default=None, help="Target distance 0-1 (default: 0.04 momentum / 0.02 fade)")
+    parser.add_argument(
+        "--exit-time",
+        default=None,
+        help="Intraday exit time HH:MM ET (e.g. 10:30). Enables minute-bar simulation. Omit for EOD OHLC simulation.",
+    )
+    parser.add_argument(
+        "--trail-pct",
+        type=float,
+        default=None,
+        help="Trailing stop distance 0-1 (e.g. 0.015 = 1.5%%). Replaces fixed target. Enables full-day minute bars.",
+    )
     args = parser.parse_args()
 
     # Sensible defaults differ by mode
     stop_pct   = args.stop_pct   if args.stop_pct   is not None else (0.04 if args.fade else STOP_PCT)
     target_pct = args.target_pct if args.target_pct is not None else (0.02 if args.fade else STOP_PCT * TARGET_MULT)
+
+    exit_time = None
+    if args.exit_time:
+        hh, mm = args.exit_time.split(":")
+        exit_time = time(int(hh), int(mm))
 
     run_backtest(
         start=date.fromisoformat(args.start),
@@ -482,4 +640,6 @@ if __name__ == "__main__":
         fade=args.fade,
         stop_pct=stop_pct,
         target_pct=target_pct,
+        exit_time=exit_time,
+        trail_pct=args.trail_pct,
     )

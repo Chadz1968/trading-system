@@ -4,16 +4,20 @@ Main orchestrator — runs the full agent pipeline:
 
 Usage:
   python main.py           # run morning scan + place trades
-  python main.py --eod     # run end-of-day reconciliation + post-mortem
+  python main.py --flatten # cancel open orders and close all positions (run ~15:55 ET)
+  python main.py --eod     # run end-of-day reflector + post-mortem (run ~16:05 ET)
 """
 
 import argparse
 import sys
 
+from alpaca.trading.client import TradingClient
+
 import finder_agent
 import filter_agent
 import risk_agent
 import reflector_agent
+from config import API_KEY, SECRET_KEY
 
 
 def morning_run():
@@ -51,6 +55,23 @@ def morning_run():
     print("\n[Main] Morning run complete.")
 
 
+def flatten_run():
+    print("=" * 60)
+    print("  TRADING SYSTEM — FLATTEN POSITIONS")
+    print("=" * 60)
+    client = TradingClient(API_KEY, SECRET_KEY, paper=True)
+    try:
+        # cancel_orders=True cancels the open bracket legs before closing
+        responses = client.close_all_positions(cancel_orders=True)
+        if responses:
+            for r in responses:
+                print(f"[Flatten] Closed {r.symbol} — status {r.status}")
+        else:
+            print("[Flatten] No open positions to close.")
+    except Exception as e:
+        print(f"[Flatten] Error: {e}")
+
+
 def eod_run():
     print("=" * 60)
     print("  TRADING SYSTEM — END OF DAY")
@@ -66,10 +87,13 @@ def eod_run():
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Multi-Agent Trading System")
-    parser.add_argument("--eod", action="store_true", help="Run end-of-day reflector instead of morning scan")
+    parser.add_argument("--flatten", action="store_true", help="Cancel open orders and close all positions (~15:55 ET)")
+    parser.add_argument("--eod",     action="store_true", help="Run end-of-day reflector + post-mortem (~16:05 ET)")
     args = parser.parse_args()
 
-    if args.eod:
+    if args.flatten:
+        flatten_run()
+    elif args.eod:
         eod_run()
     else:
         morning_run()

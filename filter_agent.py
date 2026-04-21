@@ -22,10 +22,9 @@ def _compute_rsi(closes: list[float], period: int = 14) -> float:
     if len(closes) < period + 1:
         return 50.0  # neutral if insufficient data
     deltas = [closes[i] - closes[i - 1] for i in range(1, len(closes))]
-    gains = [d for d in deltas if d > 0]
-    losses = [-d for d in deltas if d < 0]
-    avg_gain = sum(gains[-period:]) / period
-    avg_loss = sum(losses[-period:]) / period
+    recent   = deltas[-period:]
+    avg_gain = sum(d for d in recent if d > 0) / period
+    avg_loss = sum(-d for d in recent if d < 0) / period
     if avg_loss == 0:
         return 100.0
     rs = avg_gain / avg_loss

@@ -11,6 +11,8 @@ import os
 from datetime import date, datetime
 
 from alpaca.trading.client import TradingClient
+from alpaca.trading.requests import GetOrdersRequest
+from alpaca.trading.enums import QueryOrderStatus
 from openai import OpenAI
 
 from config import API_KEY, SECRET_KEY, OPENAI_KEY
@@ -35,6 +37,7 @@ def log_trade(trade: dict, order: dict) -> None:
     """
     Persist a trade entry combining the risk agent's trade dict and
     the Alpaca order confirmation. Called immediately after order submission.
+    order must contain 'id' (parent bracket order ID) and 'target_price'.
     """
     entry = {
         "date": str(date.today()),
@@ -44,13 +47,15 @@ def log_trade(trade: dict, order: dict) -> None:
         "shares": trade["shares"],
         "entry_price": trade["entry_price"],
         "stop_price": trade["stop_price"],
+        "target_price": order.get("target_price"),
         "gap_pct": trade["gap_pct"],
         "volume_ratio": trade.get("volume_ratio"),
         "rsi": trade.get("rsi"),
         "catalyst": trade.get("catalyst", ""),
         "dollar_risk": trade["dollar_risk"],
-        "order_id": order.get("id"),
+        "order_id": order.get("id"),   # parent bracket order ID
         "exit_price": None,
+        "exit_reason": None,
         "pnl": None,
         "outcome": "open",
     }
@@ -60,12 +65,13 @@ def log_trade(trade: dict, order: dict) -> None:
     print(f"[Reflector] Logged trade: {entry['symbol']} {entry['side']} {entry['shares']} shares")
 
 
-def update_exit(order_id: str, exit_price: float) -> None:
-    """Update a trade record with exit price and P&L after close."""
+def update_exit(order_id: str, exit_price: float, exit_reason: str) -> None:
+    """Update a trade record with exit price, reason, and P&L after close."""
     log = _load_json(TRADE_LOG)
     for entry in log:
         if entry.get("order_id") == order_id and entry["outcome"] == "open":
             entry["exit_price"] = exit_price
+            entry["exit_reason"] = exit_reason
             multiplier = 1 if entry["side"] == "buy" else -1
             entry["pnl"] = round((exit_price - entry["entry_price"]) * entry["shares"] * multiplier, 2)
             entry["outcome"] = "win" if entry["pnl"] > 0 else "loss"
@@ -78,17 +84,58 @@ def _collect_todays_trades() -> list[dict]:
     return [t for t in _load_json(TRADE_LOG) if t.get("date") == today]
 
 
-def _fetch_closed_positions(client: TradingClient) -> dict[str, float]:
-    """Return a map of {symbol: avg_exit_price} from today's closed orders."""
+def _fetch_exit_fills(client: TradingClient, open_trades: list[dict]) -> dict[str, tuple[float, str]]:
+    """
+    For each open trade, fetch its parent bracket order from Alpaca and look for
+    a filled child leg (stop or take-profit).  Falls back to scanning all filled
+    orders for a same-symbol market order in the opposite direction (flatten case).
+
+    Returns {parent_order_id: (exit_price, reason)} where reason is one of
+    'stop', 'target', or 'flatten'.
+    """
+    results: dict[str, tuple[float, str]] = {}
+
+    # Build a symbol → list of all filled orders map for the flatten fallback.
     try:
-        orders = client.get_orders()
-        exits = {}
-        for o in orders:
-            if str(o.status) in ("filled", "partially_filled") and o.filled_avg_price:
-                exits[o.symbol] = float(o.filled_avg_price)
-        return exits
-    except Exception:
-        return {}
+        all_orders = client.get_orders(
+            filter=GetOrdersRequest(status=QueryOrderStatus.ALL, limit=200)
+        )
+    except Exception as e:
+        print(f"[Reflector] Could not fetch order list: {e}")
+        all_orders = []
+
+    fills_by_symbol: dict[str, list] = {}
+    for o in all_orders:
+        if str(o.status) == "filled" and o.filled_avg_price:
+            fills_by_symbol.setdefault(o.symbol, []).append(o)
+
+    for trade in open_trades:
+        parent_id = trade.get("order_id")
+        if not parent_id:
+            continue
+
+        # --- Primary: check bracket child legs ---
+        try:
+            parent = client.get_order_by_id(parent_id)
+            for leg in (parent.legs or []):
+                if str(leg.status) == "filled" and leg.filled_avg_price:
+                    order_type = str(leg.order_type).lower()
+                    reason = "stop" if "stop" in order_type else "target"
+                    results[parent_id] = (float(leg.filled_avg_price), reason)
+                    break
+            if parent_id in results:
+                continue
+        except Exception as e:
+            print(f"[Reflector] Could not fetch parent order {parent_id}: {e}")
+
+        # --- Fallback: flatten — look for opposite-side market fill ---
+        opposite_side = "sell" if trade["side"] == "buy" else "buy"
+        for o in fills_by_symbol.get(trade["symbol"], []):
+            if str(o.side).lower() == opposite_side and str(o.order_type).lower() == "market":
+                results[parent_id] = (float(o.filled_avg_price), "flatten")
+                break
+
+    return results
 
 
 def close_day() -> dict:
@@ -102,12 +149,16 @@ def close_day() -> dict:
     print("[Reflector] Running end-of-day reconciliation...")
 
     client = TradingClient(API_KEY, SECRET_KEY, paper=True)
-    exits = _fetch_closed_positions(client)
 
     log = _load_json(TRADE_LOG)
-    for entry in log:
-        if entry["outcome"] == "open" and entry["symbol"] in exits:
-            update_exit(entry["order_id"], exits[entry["symbol"]])
+    open_trades = [t for t in log if t["outcome"] == "open"]
+    exits = _fetch_exit_fills(client, open_trades)
+
+    for entry in open_trades:
+        parent_id = entry.get("order_id")
+        if parent_id and parent_id in exits:
+            exit_price, exit_reason = exits[parent_id]
+            update_exit(parent_id, exit_price, exit_reason)
 
     trades_today = _collect_todays_trades()
     summary = _build_summary(trades_today)
